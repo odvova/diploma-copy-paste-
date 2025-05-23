@@ -1,1 +1,1 @@
-# diploma-copy-paste-
+# diploma-copy-paste
