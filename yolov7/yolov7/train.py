@@ -7,7 +7,7 @@ import time
 from copy import deepcopy
 from pathlib import Path
 from threading import Thread
-
+from models.common import TCLoss
 import numpy as np
 import torch.distributed as dist
 import torch.nn as nn
@@ -289,6 +289,7 @@ def train(hyp, opt, device, tb_writer=None):
     model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc  # attach class weights
     model.names = names
 
+    tc_loss = TCLoss(weight=1.0)  
     # Start training
     t0 = time.time()
     nw = max(round(hyp['warmup_epochs'] * nb), 1000)  # number of warmup iterations, max(3 epochs, 1k iterations)
@@ -355,7 +356,7 @@ def train(hyp, opt, device, tb_writer=None):
                 if sf != 1:
                     ns = [math.ceil(x * sf / gs) * gs for x in imgs.shape[2:]]  # new shape (stretched to gs-multiple)
                     imgs = F.interpolate(imgs, size=ns, mode='bilinear', align_corners=False)
-
+            
             # Forward
             with amp.autocast(enabled=cuda):
                 pred = model(imgs)  # forward
@@ -363,6 +364,11 @@ def train(hyp, opt, device, tb_writer=None):
                     loss, loss_items = compute_loss_ota(pred, targets.to(device), imgs)  # loss scaled by batch_size
                 else:
                     loss, loss_items = compute_loss(pred, targets.to(device))  # loss scaled by batch_size
+
+                # Add TCLoss
+                tc_loss_value = tc_loss(pred, targets.to(device))  # Compute TCLoss
+                loss += tc_loss_value  # Add TCLoss to the total loss
+
                 if rank != -1:
                     loss *= opt.world_size  # gradient averaged between devices in DDP mode
                 if opt.quad:
@@ -382,9 +388,10 @@ def train(hyp, opt, device, tb_writer=None):
             # Print
             if rank in [-1, 0]:
                 mloss = (mloss * i + loss_items) / (i + 1)  # update mean losses
+                mloss_tc = tc_loss_value.item()  # Log TCLoss value
                 mem = '%.3gG' % (torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0)  # (GB)
-                s = ('%10s' * 2 + '%10.4g' * 6) % (
-                    '%g/%g' % (epoch, epochs - 1), mem, *mloss, targets.shape[0], imgs.shape[-1])
+                s = ('%10s' * 2 + '%10.4g' * 7) % (
+                    '%g/%g' % (epoch, epochs - 1), mem, *mloss, mloss_tc, targets.shape[0], imgs.shape[-1])
                 pbar.set_description(s)
 
                 # Plot

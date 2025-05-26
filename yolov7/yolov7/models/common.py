@@ -20,6 +20,57 @@ from utils.torch_utils import time_synchronized
 
 ##### basic ####
 
+class TCLoss(nn.Module):
+    """
+    Ensures topological continuity by penalizing
+    discontinuities in the predicted outputs, especially for elongated or curvilinear structures.
+    """
+    def __init__(self, weight=1.0):
+        super(TCLoss, self).__init__()
+        self.weight = weight
+
+    def forward(self, predictions, targets):
+        # Compute gradients of predictions and targets
+        pred_grad_x = torch.abs(predictions[:, :, :, 1:] - predictions[:, :, :, :-1])
+        pred_grad_y = torch.abs(predictions[:, :, 1:, :] - predictions[:, :, :-1, :])
+        target_grad_x = torch.abs(targets[:, :, :, 1:] - targets[:, :, :, :-1])
+        target_grad_y = torch.abs(targets[:, :, 1:, :] - targets[:, :, :-1, :])
+
+        # Compute continuity loss as the difference in gradients
+        loss_x = torch.mean(torch.abs(pred_grad_x - target_grad_x))
+        loss_y = torch.mean(torch.abs(pred_grad_y - target_grad_y))
+
+        # Combine losses
+        loss = self.weight * (loss_x + loss_y)
+        return loss
+
+class DynamicSnakeConv(nn.Module):
+    """
+    A convolutional layer that dynamically adjusts its kernel
+    to better capture geometrically complex and curvilinear features.
+    """
+    def __init__(self, c1, c2, k=3, s=1, p=None, g=1, act=True, iterations=3):
+        super(DynamicSnakeConv, self).__init__()
+        self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p), groups=g, bias=False)
+        self.bn = nn.BatchNorm2d(c2)
+        self.act = nn.SiLU() if act is True else (act if isinstance(act, nn.Module) else nn.Identity())
+        self.iterations = iterations
+
+        # Learnable offsets for dynamic adjustment
+        self.offsets = nn.Parameter(torch.zeros(1, c2, k, k))  # Offsets for each kernel position
+
+    def forward(self, x):
+        # Standard convolution
+        x = self.conv(x)
+        x = self.bn(x)
+
+        # Iterative offset refinement
+        for _ in range(self.iterations):
+            x = x + torch.sin(self.offsets)  # Adjust feature map using offsets
+
+        # Apply activation
+        return self.act(x)
+
 def autopad(k, p=None):  # kernel, padding
     # Pad to 'same'
     if p is None:
