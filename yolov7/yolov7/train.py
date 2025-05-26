@@ -7,7 +7,6 @@ import time
 from copy import deepcopy
 from pathlib import Path
 from threading import Thread
-from models.common import TCLoss
 import numpy as np
 import torch.distributed as dist
 import torch.nn as nn
@@ -30,7 +29,7 @@ from utils.general import labels_to_class_weights, increment_path, labels_to_ima
     fitness, strip_optimizer, get_latest_run, check_dataset, check_file, check_git_status, check_img_size, \
     check_requirements, print_mutation, set_logging, one_cycle, colorstr
 from utils.google_utils import attempt_download
-from utils.loss import ComputeLoss, ComputeLossOTA
+from utils.loss import ComputeLoss, ComputeLossOTA, EIOULoss
 from utils.plots import plot_images, plot_labels, plot_results, plot_evolution
 from utils.torch_utils import ModelEMA, select_device, intersect_dicts, torch_distributed_zero_first, is_parallel
 from utils.wandb_logging.wandb_utils import WandbLogger, check_wandb_resume
@@ -289,8 +288,7 @@ def train(hyp, opt, device, tb_writer=None):
     model.class_weights = labels_to_class_weights(dataset.labels, nc).to(device) * nc  # attach class weights
     model.names = names
 
-    tc_loss = TCLoss(weight=1.0)  
-    # Start training
+    eiou_loss = EIOULoss()    
     t0 = time.time()
     nw = max(round(hyp['warmup_epochs'] * nb), 1000)  # number of warmup iterations, max(3 epochs, 1k iterations)
     # nw = min(nw, (epochs - start_epoch) / 2 * nb)  # limit warmup to < 1/2 of training
@@ -365,9 +363,11 @@ def train(hyp, opt, device, tb_writer=None):
                 else:
                     loss, loss_items = compute_loss(pred, targets.to(device))  # loss scaled by batch_size
 
-                # Add TCLoss
-                tc_loss_value = tc_loss(pred, targets.to(device))  # Compute TCLoss
-                loss += tc_loss_value  # Add TCLoss to the total loss
+               # Add EIOU Loss
+                pred_boxes = pred[..., :4]  # Extract predicted boxes (x, y, w, h)
+                target_boxes = targets[..., :4]  # Extract target boxes (x, y, w, h)
+                eiou_loss_value = eiou_loss(pred_boxes, target_boxes)
+                loss += eiou_loss_value  # Add EIOU loss to the total loss
 
                 if rank != -1:
                     loss *= opt.world_size  # gradient averaged between devices in DDP mode
@@ -388,10 +388,10 @@ def train(hyp, opt, device, tb_writer=None):
             # Print
             if rank in [-1, 0]:
                 mloss = (mloss * i + loss_items) / (i + 1)  # update mean losses
-                mloss_tc = tc_loss_value.item()  # Log TCLoss value
+                mloss_eiou = eiou_loss_value.item()  # Log EIOU loss value
                 mem = '%.3gG' % (torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0)  # (GB)
-                s = ('%10s' * 2 + '%10.4g' * 7) % (
-                    '%g/%g' % (epoch, epochs - 1), mem, *mloss, mloss_tc, targets.shape[0], imgs.shape[-1])
+                s = ('%10s' * 2 + '%10.4g' * 8) % (
+                     '%g/%g' % (epoch, epochs - 1), mem, *mloss, mloss_eiou, targets.shape[0], imgs.shape[-1])
                 pbar.set_description(s)
 
                 # Plot
