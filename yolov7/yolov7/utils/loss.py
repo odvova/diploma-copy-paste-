@@ -13,6 +13,44 @@ def smooth_BCE(eps=0.1):  # https://github.com/ultralytics/yolov3/issues/238#iss
     return 1.0 - 0.5 * eps, 0.5 * eps
 
 
+import torch
+import torch.nn as nn
+
+class EIOULoss(nn.Module):
+    """
+    Efficient Intersection over Union (EIOU) Loss.
+    Combines IOU loss, distance loss, and aspect ratio loss for better convergence and localization.
+    """
+    def __init__(self):
+        super(EIOULoss, self).__init__()
+
+    def forward(self, pred_boxes, target_boxes):
+
+        # Extract coordinates
+        px, py, pw, ph = pred_boxes[:, 0], pred_boxes[:, 1], pred_boxes[:, 2], pred_boxes[:, 3]
+        tx, ty, tw, th = target_boxes[:, 0], target_boxes[:, 1], target_boxes[:, 2], target_boxes[:, 3]
+
+        # IOU loss
+        inter_w = torch.min(px + pw / 2, tx + tw / 2) - torch.max(px - pw / 2, tx - tw / 2)
+        inter_h = torch.min(py + ph / 2, ty + th / 2) - torch.max(py - ph / 2, ty - th / 2)
+        inter_area = torch.clamp(inter_w, min=0) * torch.clamp(inter_h, min=0)
+        union_area = pw * ph + tw * th - inter_area
+        iou = inter_area / (union_area + 1e-7)
+        iou_loss = 1 - iou
+
+        # Distance loss (center points)
+        c_w = torch.max(px + pw / 2, tx + tw / 2) - torch.min(px - pw / 2, tx - tw / 2)
+        c_h = torch.max(py + ph / 2, ty + th / 2) - torch.min(py - ph / 2, ty - th / 2)
+        center_dist = (px - tx) ** 2 + (py - ty) ** 2
+        distance_loss = center_dist / (c_w ** 2 + c_h ** 2 + 1e-7)
+
+        # Aspect ratio loss
+        aspect_ratio_loss = ((pw - tw) ** 2 / (c_w ** 2 + 1e-7)) + ((ph - th) ** 2 / (c_h ** 2 + 1e-7))
+
+        # Combine losses
+        loss = iou_loss + distance_loss + aspect_ratio_loss
+        return loss
+
 class BCEBlurWithLogitsLoss(nn.Module):
     # BCEwithLogitLoss() with reduced missing label effects.
     def __init__(self, alpha=0.05):

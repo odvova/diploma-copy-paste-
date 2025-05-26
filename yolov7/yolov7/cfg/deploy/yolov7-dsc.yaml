@@ -1,0 +1,16 @@
+# parameters
+nc: 80  # number of classes
+depth_multiple: 1.0  # model depth multiple
+width_multiple: 1.0  # layer channel multiple
+
+# anchors:
+
+
+
+
+# yolov7 backbone
+
+# yolov7 head
+
+
+
