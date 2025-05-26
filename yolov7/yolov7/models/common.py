@@ -20,6 +20,34 @@ from utils.torch_utils import time_synchronized
 
 ##### basic ####
 
+class iSPPCSPC(nn.Module):
+    """
+    Simplified design inspired by SPPF.
+    Performs serial MaxPool operations to increase efficiency while maintaining accuracy.
+    """
+    def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5, k=5):
+        super(iSPPCSPC, self).__init__()
+        c_ = int(2 * c2 * e)  # hidden channels
+        self.cv1 = Conv(c1, c_, 1, 1)  # 1x1 convolution
+        self.cv2 = Conv(c1, c_, 1, 1)  # 1x1 convolution
+        self.cv3 = Conv(c_, c_, 3, 1)  # 3x3 convolution
+        self.cv4 = Conv(c_, c_, 1, 1)  # 1x1 convolution
+        self.m = nn.Sequential(
+            nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2),  # MaxPool with kernel size 5
+            nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2),  # MaxPool with kernel size 5
+            nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)   # MaxPool with kernel size 5
+        )
+        self.cv5 = Conv(4 * c_, c_, 1, 1)  # 1x1 convolution
+        self.cv6 = Conv(c_, c_, 3, 1)  # 3x3 convolution
+        self.cv7 = Conv(2 * c_, c2, 1, 1)  # 1x1 convolution
+
+    def forward(self, x):
+        x1 = self.cv4(self.cv3(self.cv1(x)))  # First branch
+        y1 = self.cv6(self.cv5(torch.cat([x1, self.m(x1)], 1)))  # Serial MaxPool operations
+        y2 = self.cv2(x)  # Second branch
+        return self.cv7(torch.cat((y1, y2), dim=1))  # Concatenate and output
+
+
 class TCLoss(nn.Module):
     """
     Ensures topological continuity by penalizing
@@ -43,6 +71,7 @@ class TCLoss(nn.Module):
         # Combine losses
         loss = self.weight * (loss_x + loss_y)
         return loss
+
 
 class DynamicSnakeConv(nn.Module):
     """
