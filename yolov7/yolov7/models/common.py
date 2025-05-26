@@ -21,10 +21,6 @@ from utils.torch_utils import time_synchronized
 ##### basic ####
 
 class iSPPCSPC(nn.Module):
-    """
-    Simplified design inspired by SPPF.
-    Performs serial MaxPool operations to increase efficiency while maintaining accuracy.
-    """
     def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5, k=5):
         super(iSPPCSPC, self).__init__()
         c_ = int(2 * c2 * e)  # hidden channels
@@ -49,10 +45,6 @@ class iSPPCSPC(nn.Module):
 
 
 class TCLoss(nn.Module):
-    """
-    Ensures topological continuity by penalizing
-    discontinuities in the predicted outputs, especially for elongated or curvilinear structures.
-    """
     def __init__(self, weight=1.0):
         super(TCLoss, self).__init__()
         self.weight = weight
@@ -73,11 +65,65 @@ class TCLoss(nn.Module):
         return loss
 
 
+class ELAN(nn.Module):
+    def __init__(self, c1, c2):
+        super(ELAN, self).__init__()
+        c_ = c2 // 2  # intermediate channels
+
+        # Branch 1: single CBS
+        self.cbs1 = Conv(c1, c_, 3, 1)
+
+        # Branch 2: four sequential CBS
+        self.cbs2_1 = Conv(c1, c_, 3, 1)
+        self.cbs2_2 = Conv(c_, c_, 3, 1)
+        self.cbs2_3 = Conv(c_, c_, 3, 1)
+        self.cbs2_4 = Conv(c_, c_, 3, 1)
+
+        # Concatenation and final CBS
+        self.concat = Concat(1)
+        self.cbs_fuse = Conv(c_ * 5, c2, 1, 1)
+
+    def forward(self, x):
+        x1 = self.cbs1(x)
+        x2_1 = self.cbs2_1(x)
+        x2_2 = self.cbs2_2(x2_1)
+        x2_3 = self.cbs2_3(x2_2)
+        x2_4 = self.cbs2_4(x2_3)
+        out = self.concat([x1, x2_1, x2_2, x2_3, x2_4])
+        out = self.cbs_fuse(out)
+        return out
+
+
+class ELAN_DSC(nn.Module):
+    def __init__(self, c1, c2):
+        super(ELAN_DSC, self).__init__()
+        c_ = c2 // 2  # intermediate channels
+
+        # Branch 1: single CBS
+        self.cbs1 = Conv(c1, c_, 3, 1)
+
+        # Branch 2: four sequential CBS
+        self.cbs2_1 = Conv(c1, c_, 3, 1)
+        self.cbs2_2 = Conv(c_, c_, 3, 1)
+        self.cbs2_3 = Conv(c_, c_, 3, 1)
+        self.cbs2_4 = Conv(c_, c_, 3, 1)
+
+        # Concatenation and final DSC (Dynamic Snake Conv)
+        self.concat = Concat(1)
+        self.dsc = DynamicSnakeConv(c_ * 5, c2, k=3, s=1)
+
+    def forward(self, x):
+        x1 = self.cbs1(x)
+        x2_1 = self.cbs2_1(x)
+        x2_2 = self.cbs2_2(x2_1)
+        x2_3 = self.cbs2_3(x2_2)
+        x2_4 = self.cbs2_4(x2_3)
+        out = self.concat([x1, x2_1, x2_2, x2_3, x2_4])
+        out = self.dsc(out)
+        return out
+
+
 class DynamicSnakeConv(nn.Module):
-    """
-    A convolutional layer that dynamically adjusts its kernel
-    to better capture geometrically complex and curvilinear features.
-    """
     def __init__(self, c1, c2, k=3, s=1, p=None, g=1, act=True, iterations=3):
         super(DynamicSnakeConv, self).__init__()
         self.conv = nn.Conv2d(c1, c2, k, s, autopad(k, p), groups=g, bias=False)

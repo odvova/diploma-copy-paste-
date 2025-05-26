@@ -1,4 +1,4 @@
-## Diploma Copy Paste
+## Diploma
 
 ## Improved YOLOv7 structure
 ![alt text](image.png)
