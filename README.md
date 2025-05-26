@@ -1,5 +1,8 @@
 ## Diploma Copy Paste
 
+## Improved YOLOv7 structure
+![alt text](image.png)
+
 ## Performance 
 
 MS COCO
