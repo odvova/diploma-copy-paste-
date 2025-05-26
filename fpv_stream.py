@@ -1,7 +1,5 @@
 import cv2
 
-# Open the default camera
-# I need specific camera (how can I specify it?) 
 
 cam = cv2.VideoCapture(1)
 
