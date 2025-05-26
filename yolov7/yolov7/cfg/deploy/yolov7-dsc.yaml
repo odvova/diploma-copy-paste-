@@ -1,16 +1,35 @@
-# parameters
+# Parameters
 nc: 80  # number of classes
 depth_multiple: 1.0  # model depth multiple
 width_multiple: 1.0  # layer channel multiple
 
-# anchors:
+# YOLOv7 Backbone
+backbone:
+  [[-1, 1, CBS, [64, 3, 1]],  # Conv layer
+   [-1, 1, CBS, [128, 3, 2]],  # Conv layer with stride 2
+   [-1, 1, CBS, [128, 3, 1]],  # Conv layer
+   [-1, 1, CBS, [256, 3, 2]],  # Conv layer with stride 2
+   [-1, 1, ELAN_DSC, [256]],  # ELAN_DSC block
+   [-1, 1, MP, [5]],  # MaxPooling
+   [-1, 1, ELAN_DSC, [512]],  # ELAN_DSC block
+   [-1, 1, MP, [5]],  # MaxPooling
+   [-1, 1, ELAN_DSC, [1024]],  # ELAN_DSC block
+   [-1, 1, MP, [5]],  # MaxPooling
+   [-1, 1, ELAN_DSC, [1024]],  # ELAN_DSC block
+   [-1, 1, SPPCSPC, [1024]]]  # SPPCSPC block
 
+# YOLOv7 Neck
+neck:
+  [[-1, 1, CBS, [512, 1, 1]],  # Conv layer
+   [-1, 1, Upsample, [None, 2, 'nearest']],  # Upsample
+   [[-1, 6], 1, Concat, [1]],  # Concat with earlier feature map
+   [-1, 1, ELAN, [512]],  # ELAN block
+   [-1, 1, MP, [5]],  # MaxPooling
+   [-1, 1, ELAN, [1024]],  # ELAN block
+   [-1, 1, MP, [5]],  # MaxPooling
+   [-1, 1, ELAN, [1024]]]  # ELAN block
 
-
-
-# yolov7 backbone
-
-# yolov7 head
-
-
-
+# YOLOv7 Head
+head:
+  [[-1, 1, RepConv, [256, 3, 1]],  # RepConv layer
+   [-1, 1, Head, [nc]]]  # Detection head
