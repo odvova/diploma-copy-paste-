@@ -175,3 +175,38 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Claude Code session data
+.claude/
+
+# Detectron2 (cloned third-party dependency)
+detectron2/
+
+# Model checkpoints and training outputs
+outputs/
+mask_rcnn/checkpoints/
+
+# Generated inference / pseudo-label outputs
+mask_rcnn/predictions/
+mask_rcnn/pseudo_labeled/
+mask_rcnn/clips/
+mask_rcnn/previews/
+
+# Video files (large inputs/outputs)
+*.mp4
+
+# Screenshots
+mask_rcnn/Screenshot_*.png
+report/Screenshot_*.png
+
+# Generated result files
+mask_rcnn/results_summary.json
+mask_rcnn/sample_pred.jpg
+
+# LaTeX build artifacts
+report/main.aux
+report/main.log
+report/main.out
+report/main.toc
+report/main.docx
+report/Козаріз_*.pdf

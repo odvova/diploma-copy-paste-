@@ -1,0 +1,27 @@
+_BASE_: ../../detectron2/configs/COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml
+
+MODEL:
+  WEIGHTS: "detectron2://COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x/137849600/model_final_f10217.pkl"
+  ROI_HEADS:
+    NUM_CLASSES: 15
+
+DATASETS:
+  TRAIN: ("isaid_train",)
+  TEST: ("isaid_val",)
+
+SOLVER:
+  IMS_PER_BATCH: 4
+  BASE_LR: 0.005
+  MAX_ITER: 90000
+  STEPS: (60000, 80000)
+  CHECKPOINT_PERIOD: 10000
+  AMP:
+    ENABLED: True
+
+TEST:
+  EVAL_PERIOD: 10000
+
+INPUT:
+  MIN_SIZE_TRAIN: (640, 672, 704, 736, 768, 800)
+
+OUTPUT_DIR: "outputs/isaid"
